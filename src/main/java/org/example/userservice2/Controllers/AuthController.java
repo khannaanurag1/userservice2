@@ -1,14 +1,15 @@
 package org.example.userservice2.Controllers;
 
-import org.example.userservice2.Dtos.LoginRequestDto;
-import org.example.userservice2.Dtos.LogoutRequestDto;
-import org.example.userservice2.Dtos.SignUpRequestDto;
-import org.example.userservice2.Dtos.UserDto;
+import org.antlr.v4.runtime.misc.Pair;
+import org.example.userservice2.Dtos.*;
+import org.example.userservice2.Models.SessionStatus;
 import org.example.userservice2.Models.User;
 import org.example.userservice2.Services.AuthService;
+import org.example.userservice2.Services.AuthService2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,15 +22,14 @@ import java.util.HashSet;
 public class AuthController {
 
     @Autowired
-    private AuthService authService;
+    private AuthService2 authService;
 
     @PostMapping("/login")
     public ResponseEntity<UserDto> login(@RequestBody LoginRequestDto loginRequestDto) {
         try {
-            //User user = authService.login(loginRequestDto.getEmail(), loginRequestDto.getPassword());
-            //UserDto userDto = getUserDto(user);
-            //return new ResponseEntity<>(userDto, HttpStatus.OK);
-            return authService.login(loginRequestDto.getEmail(), loginRequestDto.getPassword());
+            Pair<User, MultiValueMap<String,String>> userWithHeaders = authService.login(loginRequestDto.getEmail(), loginRequestDto.getPassword());
+            UserDto userDto = getUserDto(userWithHeaders.a);
+            return new ResponseEntity<>(userDto, userWithHeaders.b, HttpStatus.OK);
         } catch(Exception ex) {
             return new ResponseEntity<>(null,HttpStatus.NOT_FOUND);
         }
@@ -45,6 +45,12 @@ public class AuthController {
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@RequestBody LogoutRequestDto logoutRequestDto) {
         return null;
+    }
+
+    @PostMapping("/validate")
+    public ResponseEntity<Boolean> validateToken(@RequestBody ValidateTokenRequestDto validateTokenRequestDto) {
+       Boolean validated = authService.validateToken(validateTokenRequestDto.getToken(),validateTokenRequestDto.getId());
+        return new ResponseEntity<>(validated,HttpStatus.OK);
     }
 
     private UserDto getUserDto(User user) {

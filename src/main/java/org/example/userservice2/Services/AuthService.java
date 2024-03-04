@@ -1,15 +1,15 @@
 package org.example.userservice2.Services;
 
-import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.MacAlgorithm;
-import org.antlr.v4.runtime.misc.MultiMap;
-import org.example.userservice2.Dtos.UserDto;
+import org.antlr.v4.runtime.misc.Pair;
+import org.example.userservice2.Models.Session;
+import org.example.userservice2.Models.SessionStatus;
 import org.example.userservice2.Models.User;
+import org.example.userservice2.Repositories.SessionRepository;
 import org.example.userservice2.Repositories.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
@@ -26,19 +26,22 @@ public class AuthService {
     private UserRepository userRepository;
 
     @Autowired
+    private SessionRepository sessionRepository;
+
+    @Autowired
     private BCryptPasswordEncoder bCryptPasswordEncoder;
 
     public User signUp(String email, String password) {
         User user = new User();
         user.setEmail(email);
-        //user.setPassword(password);
+
         user.setPassword(bCryptPasswordEncoder.encode(password));
 
         User savedUser = userRepository.save(user);
         return savedUser;
     }
 
-    public ResponseEntity<UserDto> login(String email, String password) {
+    public Pair<User,MultiValueMap<String,String>> login(String email, String password) {
         Optional<User> userOptional = userRepository.findByEmail(email);
 
         if(userOptional.isEmpty()) {
@@ -46,11 +49,19 @@ public class AuthService {
         }
 
         User user = userOptional.get();
-
         if(!bCryptPasswordEncoder.matches(password,user.getPassword())) {
             return null;
         }
 
+        /**
+         *  DEMO - 1  : USE HARCODE CONTENT AND GENERATE TOKEN WITHOUT SIGNATURE
+         *  DEMO - 2  : USE HARDCODE CONTENT AND GENRATE TOKEN WITH SIGNATURE USING ALGO AND SECRET
+         *  DEMO - 3 : USE USER INFO CLAIMS MAP AND GENERATE TOKEN
+         *  DEMO - 4 : STORE TOKEN IN SESSION AND RETURN PAIR<USER,HEADERS>
+         *  DEMO - 5 : SIGN AND VALIDATE AS WELL
+         */
+
+        //DEMO - 1
         String message = "{\n" +
         "   \"email\": \"anurag@scaler.com\",\n" +
         "   \"roles\": [\n" +
@@ -65,28 +76,32 @@ public class AuthService {
         //BELOW TOKEN WILL NOT HAVE ANY SIGNATURE, IN CASE OF SIGNATURE GENERATION, USE BELOW CODE
         //String token = Jwts.builder().content(content).compact();
 
+        //DEMO-2
         MacAlgorithm algorithm = Jwts.SIG.HS256;
         SecretKey secretKey = algorithm.key().build();
         //String token = Jwts.builder().content(content).signWith(secretKey,algorithm).compact();
 
 
+        //DEMO-3
         Map<String,Object> jwtData = new HashMap<>();
         jwtData.put("email",user.getEmail());
         jwtData.put("roles",user.getRoles());
-        jwtData.put("expiryTime",new Date());
-        jwtData.put("createdAt",new Date());
-        String token = Jwts.builder().claims(jwtData).signWith(secretKey,algorithm).compact();
+        long nowInMillis = System.currentTimeMillis();
+        jwtData.put("expiryTime",new Date(nowInMillis+10000));
+        jwtData.put("createdAt",new Date(nowInMillis));
+        String token = Jwts.builder().claims(jwtData).signWith(secretKey).compact();
+
+        //DEMO-4
+        Session session = new Session();
+        session.setSessionStatus(SessionStatus.ACTIVE);
+        session.setToken(token);
+        session.setUser(user);
+        sessionRepository.save(session);
 
         MultiValueMap<String,String> headers = new LinkedMultiValueMap<>();
-        headers.add(HttpHeaders.SET_COOKIE,"auth-token "+token);
-        UserDto userDto = getUserDto(user);
-        return new ResponseEntity<>(userDto,headers, HttpStatus.OK);
-    }
-
-    private UserDto getUserDto(User user) {
-        UserDto userDto = new UserDto();
-        userDto.setEmail(user.getEmail());
-        userDto.setRoles(new HashSet<>());
-        return userDto;
+        headers.add(HttpHeaders.SET_COOKIE,"auth-token:"+token);
+        //headers.add(HttpHeaders.ACCEPT,"anuragkhanna");
+        Pair<User,MultiValueMap<String,String>> userWithHeaders = new Pair<>(user,headers);
+        return userWithHeaders;
     }
 }
